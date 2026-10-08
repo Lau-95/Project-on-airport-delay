@@ -1,0 +1,698 @@
+---
+title: "Best time to fly with minimal delays"
+author: "Lau Kian Heng Tommy"
+date: "2/1/2022"
+output:
+  pdf_document: default
+  html_document: default
+files used: airline data years 2001-2002 under Harvard Dataverse (https://doi.org/10.7910/DVN/HG7NV7)
+---
+
+```{r}
+# Set working directory
+setwd("~/Project working directory/Coursework/R files/")
+```
+
+
+```{r}
+# install.packages("RSQLite") 
+# install.packages("dpylr") 
+library(DBI, warn.conflicts = FALSE)
+library(RSQLite, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyverse, warn.conflicts = FALSE)
+library(scales, warn.conflicts = FALSE)
+```
+
+
+```{r}
+# Creating the database
+if (file.exists("r_airline.db")) 
+  file.remove("r_airline.db")
+
+conn <- dbConnect(RSQLite::SQLite(), "r_airline.db")
+```
+
+```{r}
+###For loop to write a table for each year
+for(i in c(2001)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived_df1 <- read.csv(filename, header = TRUE)
+  if(i == 2001) {
+    dbWriteTable(conn, "arrived_df1", arrived_df1, append = TRUE)
+  } 
+}
+for(i in c(2002)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived_df2 <- read.csv(filename, header = TRUE)
+  if(i == 2002) {
+    dbWriteTable(conn, "arrived_df2", arrived_df2, append = TRUE)
+  } 
+}
+# Combine both 2001 and 2002 data into one table
+arrived <- rbind(arrived_df1,arrived_df2)
+```
+
+# Remove missing data (NA) if any, requires tidyverse
+```{r}
+#also check with sum(is.na()) if there are missing values. A zero value shows that there are no missing values
+
+arrived[is.na(arrived)] <- 0
+sum(is.na(arrived$ArrDelay))
+```
+
+## Query data using dplyr
+# Task 1. Best time of day to fly with minimal delay
+# Begin by sorting time frames into 8 groups seperated by 3 hour intervals 
+```{r}
+
+#Delays occuring between 0000hr - 0259hr:
+
+dr1a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(0,259)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+
+dr1b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(0,259)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr1 <- inner_join(dr1a, dr1b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_0000h_to_0259h = numerator/denominator)%>%
+  select(delay_rate_0000h_to_0259h)
+
+HR0002 <- mean(unlist(dr1))
+```
+
+```{r}
+#Delays occuring between 0300hr - 0559hr:
+
+dr2a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(300,559)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+
+dr2b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(300,559)) %>%
+  group_by(CRSDepTime) %>%
+  summarize(denominator = n())
+
+dr2 <- inner_join(dr2a, dr2b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_0300h_0559h = numerator/denominator)%>%
+  select(delay_rate_0300h_0559h)
+
+HR0305 <- mean(unlist(dr2))
+```
+
+```{r}
+#Delays occuring between 0600hr - 0859hr:
+
+dr3a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(600,859)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+
+dr3b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(600,859)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr3 <- inner_join(dr3a, dr3b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_0600h_0859h = numerator/denominator)%>%
+  select(delay_rate_0600h_0859h)
+
+HR0608 <- mean(unlist(dr3))
+```
+
+```{r}
+#Delays occuring between 0900hr - 1159hr:
+
+dr4a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(900,1159)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+  
+
+dr4b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(900,1159)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr4 <- inner_join(dr4a, dr4b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_0900h_1159h = numerator/denominator)%>%
+  select(delay_rate_0900h_1159h)
+
+HR0911 <- mean(unlist(dr4))
+```
+
+```{r}
+#Delays occuring between 1200hr - 1459hr:
+
+dr5a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(1200,1459)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+  
+
+dr5b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(1200,1459)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr5 <- inner_join(dr5a, dr5b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_1200h_1459h = numerator/denominator)%>%
+  select(delay_rate_1200h_1459h)
+
+HR1214 <- mean(unlist(dr5))
+```
+
+```{r}
+#Delays occuring between 1500hr - 1759hr:
+
+dr6a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(1500,1759)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+  
+
+dr6b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(1500,1759)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr6 <- inner_join(dr6a, dr6b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_1500h_1759h = numerator/denominator)%>%
+  select(delay_rate_1500h_1759h)
+
+HR1517 <- mean(unlist(dr6))
+```
+
+```{r}
+#Delays occuring between 1800hr - 2059hr:
+
+dr7a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(1800,2059)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+  
+
+dr7b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(1800,2059)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr7 <- inner_join(dr7a, dr7b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_1800h_2059h = numerator/denominator)%>%
+  select(delay_rate_1800h_2059h)
+
+HR1820 <- mean(unlist(dr7))
+```
+
+```{r}
+#Delays occuring between 2100hr - 2359hr:
+
+dr8a <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(ArrDelay>0,CRSDepTime %>% between(2100,2359)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(numerator = n())
+  
+
+dr8b <- select(arrived, CRSDepTime, ArrDelay) %>%
+  filter(CRSDepTime %>% between(2100,2359)) %>%
+  group_by(CRSDepTime) %>% 
+  summarize(denominator = n())
+
+dr8 <- inner_join(dr8a, dr8b, by = "CRSDepTime") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_2100h_2359h = numerator/denominator)%>%
+  select(delay_rate_2100h_2359h)
+
+HR2123 <- mean(unlist(dr8))
+```
+
+## Task 2. Best day of the week to fly with minimal delay
+# Begin by sorting time frames into 7 groups by each day
+
+```{r}
+#Delays occuring on Mondays
+
+dr_Ma <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==1) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Mb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==1) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Mon <- inner_join(dr_Ma, dr_Mb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Mondays = numerator/denominator)%>%
+  select(delay_rate_Mondays)
+
+Mon <- mean(unlist(dr_Mon))
+```
+
+```{r}
+dr_Ta <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==2) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Tb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==2) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Tue <- inner_join(dr_Ta, dr_Tb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Tuesdays = numerator/denominator)%>%
+  select(delay_rate_Tuesdays)
+
+Tue <- mean(unlist(dr_Tue))
+```
+
+```{r}
+dr_Wa <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==3) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Wb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==3) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Wed <- inner_join(dr_Wa, dr_Wb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Wednesdays = numerator/denominator)%>%
+  select(delay_rate_Wednesdays)
+
+Wed <- mean(unlist(dr_Wed))
+```
+
+```{r}
+dr_Thra <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==4) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Thrb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==4) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Thr <- inner_join(dr_Thra, dr_Thrb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Thursdays = numerator/denominator)%>%
+  select(delay_rate_Thursdays)
+
+Thur <- mean(unlist(dr_Thr))
+```
+
+```{r}
+dr_Fa <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==5) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Fb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==5) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Fri <- inner_join(dr_Fa, dr_Fb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Fridays = numerator/denominator)%>%
+  select(delay_rate_Fridays)
+
+Fri <- mean(unlist(dr_Fri))
+```
+
+
+```{r}
+dr_Sata <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==6) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Satb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==6) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Sat <- inner_join(dr_Sata, dr_Satb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Saturdays = numerator/denominator)%>%
+  select(delay_rate_Saturdays)
+
+Sat <- mean(unlist(dr_Sat))
+```
+
+
+```{r}
+dr_Suna <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(ArrDelay>0,DayOfWeek==7) %>%
+  group_by(DayOfWeek) %>%
+  summarize(numerator = n())
+
+
+dr_Sunb <- select(arrived, DayOfWeek, ArrDelay) %>%
+  filter(DayOfWeek==7) %>%
+  group_by(DayOfWeek) %>% 
+  summarize(denominator = n())
+
+dr_Sun <- inner_join(dr_Suna, dr_Sunb, by = "DayOfWeek") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Sundays = numerator/denominator)%>%
+  select(delay_rate_Sundays)
+
+Sun <- mean(unlist(dr_Sun))
+```
+
+
+## Task 2. Best time of year to fly with minimal delay
+# Sort into months
+```{r}
+dr_Jana <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==1) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Janb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==1) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Jan <- inner_join(dr_Jana, dr_Janb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Spring = numerator/denominator)%>%
+  select(delay_rate_Spring)
+
+Jan = mean(unlist(dr_Jan))
+Jan
+```
+
+
+```{r}
+dr_Feba <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==2) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Febb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==2) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Feb <- inner_join(dr_Feba, dr_Febb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Summer = numerator/denominator)%>%
+  select(delay_rate_Summer)
+
+Feb = mean(unlist(dr_Feb))
+Feb
+```
+
+
+```{r}
+dr_Mara <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==3) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Marb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==3) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Mar <- inner_join(dr_Mara, dr_Marb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Mar = mean(unlist(dr_Mar))
+Mar
+```
+
+```{r}
+dr_Apra <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==4) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Aprb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==4) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Apr <- inner_join(dr_Apra, dr_Aprb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Apr = mean(unlist(dr_Apr))
+Apr
+```
+
+
+```{r}
+dr_Maya <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==5) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Mayb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==5) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_May <- inner_join(dr_Maya, dr_Mayb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+May = mean(unlist(dr_May))
+May
+```
+```{r}
+dr_Juna <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==6) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Junb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==6) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Jun <- inner_join(dr_Juna, dr_Junb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Jun = mean(unlist(dr_Jun))
+Jun
+```
+```{r}
+dr_Jula <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==7) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Julb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==7) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Jul <- inner_join(dr_Jula, dr_Julb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Jul = mean(unlist(dr_Jul))
+Jul
+```
+```{r}
+dr_Auga <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==8) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Augb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==8) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Aug <- inner_join(dr_Auga, dr_Augb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Aug = mean(unlist(dr_Aug))
+Aug
+```
+
+```{r}
+dr_Sepa <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==9) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Sepb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==9) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Sep <- inner_join(dr_Sepa, dr_Sepb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Sep = mean(unlist(dr_Sep))
+Sep
+```
+```{r}
+dr_Octa <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==10) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Octb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==10) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Oct <- inner_join(dr_Octa, dr_Octb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Oct = mean(unlist(dr_Oct))
+Oct
+```
+```{r}
+dr_Nova <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==11) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Novb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==11) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Nov <- inner_join(dr_Nova, dr_Novb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Nov = mean(unlist(dr_Nov))
+Nov
+```
+
+```{r}
+dr_Deca <- select(arrived, Month, ArrDelay) %>%
+  filter(ArrDelay>0,Month==12) %>%
+  group_by(Month) %>%
+  summarize(numerator = n())
+
+dr_Decb <- select(arrived, Month, ArrDelay) %>%
+  filter(Month==12) %>%
+  group_by(Month) %>% 
+  summarize(denominator = n())
+
+dr_Dec <- inner_join(dr_Deca, dr_Decb, by = "Month") %>%
+  mutate(numerator = as.double(numerator)) %>%
+  mutate(denominator = as.double(denominator)) %>%
+  mutate(delay_rate_Autumn = numerator/denominator)%>%
+  select(delay_rate_Autumn)
+
+Dec = mean(unlist(dr_Dec))
+Dec
+```
+
+```{r}
+#Graph Visualisation
+Daily <- c(HR0002,HR0305,HR0608,HR0911,HR1214,HR1517,HR1820,HR2123)
+DailyH <- c("0000-0259","0300-0559","0600-0859","0900-1159","1200-1459","1500-1759","1800-2059","2100-2359")
+barplot(Daily,names.arg=DailyH,xlab="Daylight_Hours",ylab="Delay",las=2,col="Blue",main="Delay Probability daily",border="red")
+```
+```{r}
+Weekday <- c(Mon,Tue,Wed,Thur,Fri,Sat,Sun)
+WeekdayW <- c("Mondays","Tuesdays","Wednesdays","Thurdays","Fridays","Saturdays","Sundays")
+barplot(Weekday,names.arg=WeekdayW,xlab="Weekdays",ylab="Delay",las=2,col="Yellow",main="Delay Probability weekly",border="red")
+```
+
+
+```{r}
+Month <- c(Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec)
+MonkaS <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+barplot(Month,names.arg=MonkaS,xlab="Month",ylab="Delay",las=2,col="Green",main="Delay Probability in a year",border="red")
+```
+
+## Conclusion
+
+
+```{r}
+x <- HR0305
+y <- Sat
+z <- Sep
+
+
+
+print(paste("The best time of the day to fly is between 0300hr to 0600hr as it has the lowest mean delay of", label_percent(accuracy=0.01)(x)))
+print(paste("The best day of the week to fly is Saturdays as it has the lowest mean delay of", label_percent(accuracy=0.01)(y)))
+print(paste("The best time of the year to fly is in September as it has the lowest mean delay of", label_percent(accuracy=0.01)(z)))
+```
+
+
+```{r}
+dbDisconnect(conn)
+```
+
+
+

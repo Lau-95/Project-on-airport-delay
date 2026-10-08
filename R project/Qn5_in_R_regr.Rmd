@@ -1,0 +1,217 @@
+---
+title: "Predicting delays with numerical features"
+author: "Tommy Lau"
+date: "3/22/2022"
+output: html_document
+---
+```{r}
+# Set working directory
+setwd("~/Project working directory/Coursework/R files/")
+```
+
+```{r}
+# install.packages("RSQLite")
+library(DBI, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(RSQLite, warn.conflicts = FALSE)
+library(mlr3, warn.conflicts = FALSE)
+library(mlr3pipelines, warn.conflicts = FALSE)
+library(mlr3learners, warn.conflicts = FALSE)
+```
+
+```{r}
+# Creating the database
+if (file.exists("r_airline5.db")) 
+  file.remove("r_airline5.db")
+
+conn <- dbConnect(RSQLite::SQLite(), "r_airline5.db")
+```
+
+```{r}
+###For loop to write a table for each year
+for(i in c(2001)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived1 <- read.csv(filename, header = TRUE, encoding = "latin1", stringsAsFactor=FALSE)
+  if(i == 2001) {
+    dbWriteTable(conn, "arrived1", arrived1, append = TRUE)
+  } 
+}
+for(i in c(2002)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived2 <- read.csv(filename, header = TRUE, encoding = "latin1", stringsAsFactor=FALSE)
+  if(i == 2002) {
+    dbWriteTable(conn, "arrived2", arrived2, append = TRUE)
+  } 
+}
+arrived <- rbind(arrived1,arrived2)
+```
+
+```{r}
+#Generating sample size, 10% of true data
+df1 <- sample_n(arrived, 100000)
+#Replace NA with zero
+df1[is.na(df1)] <- 0
+```
+
+```{r}
+df2 <- select(df1, DepDelay, ActualElapsedTime, CRSElapsedTime, AirTime, Distance, TaxiIn, TaxiOut, Cancelled, Diverted)
+```
+
+```{r}
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x)))
+}
+```
+
+```{r}
+dt2 <- df1 %>%
+  select(DepDelay, ActualElapsedTime, CRSElapsedTime, AirTime, Distance, TaxiIn, TaxiOut, Cancelled, Diverted) %>%
+  mutate(DepDelay = round(normalize(DepDelay), digits=2)) %>%
+  mutate(ActualElapsedTime = round(normalize(ActualElapsedTime), digits=2)) %>%
+  mutate(CRSElapsedTime = round(normalize(CRSElapsedTime), digits=2)) %>%
+  mutate(AirTime = round(normalize(AirTime), digits=2)) %>%
+  mutate(Distance = round(normalize(Distance), digits=2)) %>%
+  mutate(TaxiIn = round(normalize(TaxiIn), digits=2)) %>%
+  mutate(TaxiOut = round(normalize(TaxiOut), digits=2)) %>%
+  mutate(Cancelled = round(normalize(Cancelled), digits=2)) %>%
+  mutate(Diverted = round(normalize(Diverted), digits=2))
+dt3 <- select(dt2, DepDelay, ActualElapsedTime, CRSElapsedTime, AirTime, Distance, TaxiIn, TaxiOut, Cancelled, Diverted)
+# Convert data type to factor
+dt4 <- dt3
+for(i in 1:ncol(dt4)){
+  dt4[ , i] <- factor(dt4[ , i])
+}
+
+```
+
+```{r}
+n <- nrow(dt4)
+
+set.seed(100)
+tr_num <- sample(n, round(0.5*n))  # Train set
+test_num <- setdiff(1:n, tr_num) # Test set
+```
+
+```{r}
+task <- TaskRegr$new('Delayed', backend = dt3, target = 'DepDelay')
+task$select(c('ActualElapsedTime', 'CRSElapsedTime', 'AirTime', 'Distance', 'TaxiIn', 'TaxiOut', 'Cancelled','Diverted'))
+```
+
+```{r}
+measure <- msr('regr.mse') #Set measure
+faccode <- po("encode", method="treatment",        
+               affect_columns=selector_type("factor")) #Encoding with factors
+```
+
+```{r}
+#Logistic regression learner
+lr_lnr <- lrn("regr.lm") 
+#Column grouping
+lr_gc <- po('imputemean', affect_columns=selector_type("numeric")) %>>%
+  po('imputemode', affect_columns=selector_type(c("factor","ordered"))) %>>%
+  po(lr_lnr)  
+lr_glnr <- GraphLearner$new(lr_gc) 
+
+lr_glnr$train(task, row_ids = tr_num)
+lr_glnr$predict(task, row_ids = test_num)$score()
+```
+
+```{r}
+#Random Forest
+#install.packages('mlr3tuning')
+#install.packages("ranger")
+#library(mlr3tuning)
+#library(ranger)
+set.seed(123)
+tuner <- tnr('grid_search')
+terminator <- trm('evals', n_evals = 20)
+
+rf_lnr <- lrn('regr.ranger')
+rf_lnr$param_set$values <- list(min.node.size=4)
+
+rf_gc <- po('imputemean', affect_columns=selector_type("numeric")) %>>%
+  po('imputemode', affect_columns=selector_type(c("factor","ordered"))) %>>%
+  po(rf_lnr)
+
+rf_glrn <- GraphLearner$new(rf_gc)
+
+set_ntrees <- ParamSet$new (list(
+  ParamInt$new('regr.ranger.num.trees', lower = 50, upper = 600)
+))
+
+
+rf_at <- AutoTuner$new(
+  learner = rf_glrn,
+  resampling = rsmp('cv', folds=3),
+  measure = measure,
+  search_space = set_ntrees,
+  terminator = terminator,
+  tuner = tuner
+)
+
+rf_at$train(task, row_ids = tr_num)
+rf_at$predict(task, row_ids = test_num)$score() 
+
+```
+
+```{r}
+#install.packages("xgboost")
+#library(xgboost)
+
+set.seed(10)
+
+learner_gb <- lrn("classif.xgboost")
+
+gc_gb <- po('imputemean', affect_columns=selector_type("numeric")) %>>%
+  po('imputemode', affect_columns=selector_type(c("factor","ordered"))) %>>%
+  faccode %>>% ord_to_int %>>%
+  po(learner_gb)
+
+glrn_gb <- GraphLearner$new(gc_gb)
+
+glrn_gb$train(task, row_ids = tr_num)
+glrn_gb$predict(task, row_ids = test_num)$score() 
+```
+
+```{r}
+learner_tree <- lrn("classif.rpart")
+
+gc_tree <- po('imputemean', affect_columns=selector_type("numeric")) %>>%
+  po('imputemode', affect_columns=selector_type(c("factor","ordered"))) %>>%
+  po(learner_tree)
+
+glrn_tree <- GraphLearner$new(gc_tree)
+
+glrn_tree$train(task, row_ids = tr_num)
+glrn_tree$predict(task, row_ids = test_num)$score() 
+```
+
+
+```{r}
+#Benchmarking both learners
+
+set.seed(1)
+
+list_lnr <- list(
+  lr_glnr,
+  rf_at,
+  glrn_gb,
+  glrn_tree
+)
+
+bm_design <- benchmark_grid(task=task, resamplings=rsmp('cv', folds=3), 
+                            learners=list_lnr)
+bmr <- benchmark(bm_design, store_models=TRUE)
+```
+
+```{r}
+#Visualise with boxplot
+autoplot(bmr) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+bmr$aggregate(measure)
+```
+

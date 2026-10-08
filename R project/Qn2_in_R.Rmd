@@ -1,0 +1,128 @@
+---
+title: "Do older planes suffer more delays"
+author: "Tommy Lau"
+date: "2/4/2022"
+output: html_document
+---
+```{r}
+# Set working directory
+setwd("~/Project working directory/Coursework/R files/")
+```
+
+```{r}
+# install.packages("RSQLite")
+library(DBI, warn.conflicts = FALSE)
+library(RSQLite, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(lubridate, warn.conflicts = FALSE)
+library(magrittr, warn.conflicts = FALSE)
+library(ggplot2, warn.conflicts = FALSE)
+```
+
+```{r}
+# Creating the database
+if (file.exists("r_airline2.db")) 
+  file.remove("r_airline2.db")
+
+conn <- dbConnect(RSQLite::SQLite(), "r_airline2.db")
+```
+
+```{r}
+#Load the data needed from csv
+planes <- read.csv("plane-data.csv", header = TRUE)
+dbWriteTable(conn, "planes", planes)
+```
+
+```{r}
+###For loop to write a table for each year
+for(i in c(2001)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived1 <- read.csv(filename, header = TRUE)
+  if(i == 2001) {
+    dbWriteTable(conn, "arrived1", arrived1, append = TRUE)
+  } 
+}
+for(i in c(2002)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived2 <- read.csv(filename, header = TRUE)
+  if(i == 2002) {
+    dbWriteTable(conn, "arrived2", arrived2, append = TRUE)
+  } 
+}
+
+```
+```{r}
+#Replace all NA with zero, also check with sum(is.na()) if there are missing values. 
+arrived1[is.na(arrived1)] <- 0
+arrived2[is.na(arrived2)] <- 0
+sum(is.na(arrived1$ArrDelay))
+sum(is.na(arrived2$ArrDelay))
+```
+
+
+```{r}
+# Do older planes suffer more delays?
+# Create a dataframe to work with
+df1 <- dbGetQuery(conn, 
+"SELECT issue_date as plane_age, ArrDelay
+FROM planes JOIN arrived1 USING(tailnum)
+WHERE ArrDelay > 0   
+GROUP BY plane_age
+ORDER BY plane_age DESC
+            ")
+df2 <- dbGetQuery(conn, 
+"SELECT issue_date as plane_age, ArrDelay
+FROM planes JOIN arrived2 USING(tailnum)
+WHERE ArrDelay > 0   
+GROUP BY plane_age
+ORDER BY plane_age DESC
+            ")
+```
+
+```{r}
+#Bind year 2001 and 2002 data
+df3 <- rbind(df1,df2, fill=TRUE)
+```
+
+
+```{r}
+#Remove row with "None" character
+df4 <- df3[!grepl("None", df3$plane_age),]
+#Convert plane_age from character to date time
+# & filter out to dates 
+df4 %<>%
+  mutate(plane_age = as.Date(df4$plane_age, format= "%m/%d/%Y")) %>% 
+  filter(plane_age <= as.Date("2002-12-28"))
+```
+
+
+
+```{r}
+#Convert DOB into age intergers
+df4$Age = as.numeric(difftime(Sys.Date(),df4$plane_age, units = "weeks"))/52.25
+df4 = df4[order(df4$Age),]
+df5 <- df4 %>% mutate(across(where(is.numeric), round, digits = 1))
+```
+
+```{r}
+df5 %>%
+  ggplot() + geom_col(aes(Age, ArrDelay),) + ggtitle('Delay by plane age')
+```
+```{r}
+summary(df5)
+```
+
+
+```{r}
+dbDisconnect(conn)
+```
+
+
+
+
+
+
+
+

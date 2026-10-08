@@ -1,0 +1,186 @@
+---
+title: "How does the number of people flying between different locations change over"
+  time?
+author: "Tommy Lau"
+date: "2/12/2022"
+output: html_document
+---
+```{r}
+# Set working directory
+setwd("~/Project working directory/Coursework/R files/")
+```
+
+```{r}
+# install.packages("RSQLite")
+library(DBI, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(RSQLite, warn.conflicts = FALSE)
+library(lubridate, warn.conflicts = FALSE)
+library(magrittr, warn.conflicts = FALSE)
+library(ggplot2, warn.conflicts = FALSE)
+```
+
+```{r}
+# Creating the database
+if (file.exists("r_airline3.db")) 
+  file.remove("r_airline3.db")
+
+conn <- dbConnect(RSQLite::SQLite(), "r_airline3.db")
+```
+
+```{r}
+###For loop to write a table for each year
+for(i in c(2001)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived1 <- read.csv(filename, header = TRUE)
+  if(i == 2001) {
+    dbWriteTable(conn, "arrived1", arrived1, append = TRUE)
+  } 
+}
+for(i in c(2002)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived2 <- read.csv(filename, header = TRUE)
+  if(i == 2002) {
+    dbWriteTable(conn, "arrived2", arrived2, append = TRUE)
+  } 
+}
+
+```
+
+```{r}
+#Create a table for 2001
+df1 <- data.frame(Origin = c(arrived1$Origin), Destination = c(arrived1$Dest))
+df2 <- df1 %>%
+  count(Origin, Destination, sort = TRUE)
+df2 = df2[order(df2$Origin),]
+df3 <- df2 %>% 
+  rename(Flight_count = n)
+```
+
+```{r}
+#Create a table for 2002
+dt1 <- data.frame(Origin = c(arrived2$Origin), Destination = c(arrived2$Dest))
+dt2 <- dt1 %>%
+  count(Origin, Destination, sort = TRUE)
+dt2 = dt2[order(dt2$Origin),]
+dt3 <- dt2 %>% 
+  rename(Flight_count = n)
+```
+
+
+```{r}
+#Flights for 2001
+df4 <- df3 %>%
+  head(100)
+ggplot(df4, aes(x=Destination, y=Flight_count, group = 1)) + 
+  ggtitle('Observed flight counts in 2001') +
+    geom_line() +
+    geom_point(size=0.25) +
+  geom_text(
+    label=df4$Flight_count, 
+    nudge_x = 0.25, nudge_y = 25,
+    size=3.5,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  geom_text(
+    label=df4$Destination, 
+    nudge_x = 0.25, nudge_y = 200,
+    size=2,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  theme(axis.text.x = element_blank()) 
+print(as_tibble(df4))
+```
+
+```{r}
+dt4 <- dt3 %>% 
+  head(100)
+ggplot(dt4, aes(x=Destination, y=Flight_count, group = 1)) + ggtitle('Observed flight counts in 2002') +
+  geom_line() +
+  geom_point(size=0.25) +
+  geom_text(
+    label=dt4$Flight_count, 
+    nudge_x = 0.25, nudge_y = 75,
+    size=3.5,
+    vjust=1, 
+    check_overlap = T
+  ) +  
+  geom_text(
+    label=dt4$Destination, 
+    nudge_x = 0.25, nudge_y = 250,
+    size=2,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  theme(axis.text.x = element_blank()) 
+print(as_tibble(dt4))
+``` 
+
+
+```{r} 
+df5 <- df3 %>% 
+  tail(100)
+ggplot(df5, aes(x=Destination, y=Flight_count, group = 1)) + 
+  ggtitle('Last 100 observations in 2001') +
+    geom_line() +
+    geom_point(size=0.25) +
+  geom_text(
+    label=df5$Flight_count, 
+    nudge_x = 0.25, nudge_y = 25,
+    size=3.5,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  geom_text(
+    label=df5$Destination, 
+    nudge_x = 0.25, nudge_y = 200,
+    size=2,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  theme(axis.text.x = element_blank()) 
+print(as_tibble(df5))
+```
+
+
+
+```{r}
+dt5 <- dt3 %>% 
+  tail(100)
+ggplot(dt5, aes(x=Destination, y=Flight_count, group = 1)) + 
+  ggtitle('Last 100 observations in 2002') +
+    geom_line() +
+    geom_point(size=0.25) +
+  geom_text(
+    label=dt5$Flight_count, 
+    nudge_x = 0.25, nudge_y = 25,
+    size=3.5,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  geom_text(
+    label=dt5$Destination, 
+    nudge_x = 0.25, nudge_y = 200,
+    size=2,
+    vjust=1, 
+    check_overlap = T
+  ) +
+  theme(axis.text.x = element_blank()) 
+print(as_tibble(dt5))
+```
+
+
+
+```{r}
+dbDisconnect(conn)
+```
+
+
+
+
+
+

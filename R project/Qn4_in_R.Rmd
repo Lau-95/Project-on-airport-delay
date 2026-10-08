@@ -1,0 +1,89 @@
+---
+title: "Can you detect cascading failures as delays in one airport create delays in others?"
+author: "Tommy Lau"
+date: "3/14/2022"
+output: html_document
+---
+```{r}
+# Set working directory
+setwd("~/Project working directory/Coursework/R files/")
+```
+
+```{r}
+# install.packages("RSQLite")
+library(DBI, warn.conflicts = FALSE)
+library(dplyr, warn.conflicts = FALSE)
+library(RSQLite, warn.conflicts = FALSE)
+library(lubridate, warn.conflicts = FALSE)
+library(magrittr, warn.conflicts = FALSE)
+library(ggplot2, warn.conflicts = FALSE)
+library(stringr, warn.conflicts = FALSE)
+library(writexl, warn.conflicts = FALSE)
+```
+
+```{r}
+# Creating the database
+if (file.exists("r_airline4.db")) 
+  file.remove("r_airline4.db")
+
+conn <- dbConnect(RSQLite::SQLite(), "r_airline4.db")
+```
+
+```{r}
+###For loop to write a table for each year
+for(i in c(2001)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived1 <- read.csv(filename, header = TRUE, encoding = "latin1", stringsAsFactor=FALSE)
+  if(i == 2001) {
+    dbWriteTable(conn, "arrived1", arrived1, append = TRUE)
+  } 
+}
+for(i in c(2002)) {
+  filename <- paste0(i, ".csv.bz2")
+  print(paste("Processing:", i))
+  arrived2 <- read.csv(filename, header = TRUE, encoding = "latin1", stringsAsFactor=FALSE)
+  if(i == 2002) {
+    dbWriteTable(conn, "arrived2", arrived2, append = TRUE)
+  } 
+}
+arrived <- rbind(arrived1,arrived2)
+```
+
+```{r}
+df1 <- select(arrived, Year, Month, DayofMonth, DayOfWeek, TailNum, DepTime, CRSDepTime, ArrTime, CRSArrTime, FlightNum, ActualElapsedTime, CRSElapsedTime, ArrDelay, DepDelay, Origin, Dest) %>%
+  filter(DepDelay>0, ArrDelay>0) %>%
+  group_by(TailNum)
+```
+
+```{r}
+#Convert latin characters in df1 to ASCII
+dt <- iconv(df1$TailNum, "latin1", "ASCII", sub="")
+df2 <- data.frame(TailNum = c(dt))
+df1$Tail_Num <- df2$TailNum #Add the correction into df1
+df3 <- select(df1, Tail_Num, Year, Month, DayofMonth, DayOfWeek, DepTime, CRSDepTime, ArrTime, CRSArrTime, Origin, Dest, ActualElapsedTime, CRSElapsedTime, FlightNum, ArrDelay, DepDelay) 
+df3$TailNum <- NULL  #Replace the TailNum column with correction
+```
+
+```{r}
+dt2 <- count(df3,Tail_Num) #Count number of delay occurances
+df4 <- df3 %>%
+  inner_join(dt2, by = "Tail_Num") %>%
+  filter(n>1400)
+df4 = df4[order(-df4$n),]
+print(as_tibble(df4))
+```
+
+```{r}
+Carrier_N5CA1 <- df4 %>% #Filter to N5CA1
+  filter(Tail_Num=="N5CA1")
+Carrier_N5CA1 = Carrier_N5CA1[order(Carrier_N5CA1$DayofMonth),]
+print(as_tibble(Carrier_N5CA1))
+```
+
+```{r}
+#Close the connection
+dbDisconnect(conn)
+```
+
+
